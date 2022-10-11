@@ -312,9 +312,9 @@ func (jc *JobController) ReconcilePods(
 	// If replica is 1, return a slice with size 3. [[0],[1],[2]], pod with replica-index 1 and 2 are out of range and will be deleted.
 	podSlices := jc.GetPodSlices(pods, numReplicas, logger)
 	for index, podSlice := range podSlices {
-		if len(podSlice) > 1 {
+		if len(podSlice) > 1 { // 非法情况
 			logger.Warningf("We have too many pods for %s %d", rt, index)
-		} else if len(podSlice) == 0 {
+		} else if len(podSlice) == 0 { // pod没有创建，执行pod创建逻辑
 			logger.Infof("Need to create new pod: %s-%d", rt, index)
 
 			// check if this replica is the master role
@@ -326,7 +326,7 @@ func (jc *JobController) ReconcilePods(
 		} else {
 			// Check the status of the current pod.
 			pod := podSlice[0]
-
+			// pod的个数超过replica，执行pod删除逻辑
 			// check if the index is in the valid range, if not, we should kill the pod
 			if index < 0 || index >= numReplicas {
 				err = jc.PodControl.DeletePod(pod.Namespace, pod.Name, runtimeObject)
@@ -337,6 +337,7 @@ func (jc *JobController) ReconcilePods(
 				jc.Expectations.RaiseExpectations(expectationPodsKey, 0, 1)
 			}
 
+			// 处理pod terminated的场景
 			// Get the exit code of the container.
 			var exitCode int32 = 0xbeef // magic number
 			for _, status := range pod.Status.ContainerStatuses {
@@ -347,6 +348,7 @@ func (jc *JobController) ReconcilePods(
 					jc.Recorder.Eventf(runtimeObject, v1.EventTypeNormal, exitedWithCodeReason, "Pod: %v.%v exited with code %v", pod.Namespace, pod.Name, exitCode)
 				}
 			}
+			// 处理pod failed的场景
 			// Check if the pod is retryable.
 			if pod.Status.Phase == v1.PodFailed &&
 				(spec.RestartPolicy == apiv1.RestartPolicyExitCode && trainutil.IsRetryableExitCode(exitCode) ||
@@ -361,7 +363,7 @@ func (jc *JobController) ReconcilePods(
 				jc.Expectations.RaiseExpectations(expectationPodsKey, 0, 1)
 
 			}
-
+			// 更新Job状态
 			updateJobReplicaStatuses(jobStatus, rType, pod)
 		}
 	}

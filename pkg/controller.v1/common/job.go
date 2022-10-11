@@ -95,6 +95,7 @@ func (jc *JobController) ReconcileJobs(
 	}
 
 	oldStatus := jobStatus.DeepCopy()
+	// 处理Job Succeed和Failed场景
 	if commonutil.IsSucceeded(jobStatus) || commonutil.IsFailed(jobStatus) {
 		// If the Job is succeed or failed, delete all pods and services.
 		if err := jc.DeletePodsAndServices(runPolicy, job, pods); err != nil {
@@ -174,7 +175,7 @@ func (jc *JobController) ReconcileJobs(
 		jobExceedsLimit = true
 	}
 
-	if jobExceedsLimit {
+	if jobExceedsLimit { // 处理job Exceed limit场景
 		// Set job completion time before resource cleanup
 		if jobStatus.CompletionTime == nil {
 			now := metav1.Now()
@@ -209,7 +210,7 @@ func (jc *JobController) ReconcileJobs(
 		}
 
 		return jc.Controller.UpdateJobStatusInApiServer(job, &jobStatus)
-	} else {
+	} else { // 处理常规场景
 		// General cases which need to reconcile
 		if jc.Config.EnableGangScheduling {
 			minMember := totalReplicas
@@ -285,6 +286,7 @@ func (jc *JobController) ReconcileJobs(
 		}
 	}
 
+	// 更新JobStatus
 	err = jc.Controller.UpdateJobStatus(job, replicas, &jobStatus)
 	if err != nil {
 		log.Warnf("UpdateJobStatus error %v", err)
